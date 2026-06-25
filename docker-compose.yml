@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    ports:
+      - "1521:1521"
+    environment:
+      - ORACLE_PASSWORD=oracle123
+      - APP_USER=ticket_user
+      - APP_USER_PASSWORD=ticket_password
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - JWT_SECRET=njbank-ticket-system-secret-key-2025
+      - ORACLE_URL=jdbc:oracle:thin:@oracle:1521/XE
+      - ORACLE_USERNAME=ticket_user
+      - ORACLE_PASSWORD=ticket_password
+    depends_on:
+      oracle:
+        condition: service_healthy
+
+  frontend:
+    image: node:18-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - backend
+
+volumes:
+  oracle-data:
+  backend-data:
