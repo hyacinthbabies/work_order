@@ -99,3 +99,25 @@ export const getKnowledgeSolutions = () => request.get('/knowledge/solutions')
 export const getKnowledgeSolutionsByCategory = (category) => request.get(`/knowledge/solutions/category/${category}`)
 export const saveKnowledgeSolution = (data) => request.post('/knowledge/solutions', data)
 export const deleteKnowledgeSolution = (id) => request.delete(`/knowledge/solutions/${id}`)
+
+export const getKnowledgeArticles = () => request.get('/knowledge/articles')
+export const getKnowledgeArticlesByCategory = (category) => request.get(`/knowledge/articles/category/${category}`)
+export const getKnowledgeArticleById = (id) => request.get(`/knowledge/articles/${id}`)
+export const saveKnowledgeArticle = (data) => request.post('/knowledge/articles', data)
+export const deleteKnowledgeArticle = (id) => request.delete(`/knowledge/articles/${id}`)
+export const searchKnowledgeArticles = (keyword) => request.get('/knowledge/articles/search', { params: { keyword } })
+export const findRelatedArticles = (keyword) => request.get('/knowledge/articles/related', { params: { keyword } })
+
+export const uploadAttachment = (ticketId, file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post(`/attachments/upload/${ticketId}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export const getAttachmentsByTicketId = (ticketId) => request.get(`/attachments/ticket/${ticketId}`)
+
+export const deleteAttachment = (id) => request.delete(`/attachments/${id}`)
+
+export const revokeTicket = (id, data) => request.put(`/tickets/${id}/revoke`, data)

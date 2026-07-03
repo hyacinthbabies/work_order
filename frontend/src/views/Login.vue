@@ -34,8 +34,8 @@ const router = useRouter()
 const loading = ref(false)
 const loginFormRef = ref(null)
 const loginForm = reactive({
-  username: 'zhangsan01',
-  password: '123456'
+  username: 'kefu01',
+  password: 'kefu123'
 })
 
 const handleLogin = async () => {
@@ -55,7 +55,7 @@ const handleLogin = async () => {
 
 const handleSSOLogin = () => {
   localStorage.setItem('token', 'sso-token-12345')
-  localStorage.setItem('user', JSON.stringify({ username: 'zhangsan01', name: '张三', role: '一线客服', department: '客服中心' }))
+  localStorage.setItem('user', JSON.stringify({ username: 'kefu01', name: '张三', role: '一线客服', department: '客服中心' }))
   router.push('/dashboard')
 }
 </script>

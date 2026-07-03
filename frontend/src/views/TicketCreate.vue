@@ -159,19 +159,19 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="客户姓名">
-                  <el-input v-model="form.customerName" :disabled="true" style="color:#9ca3af" />
+                  <el-input v-model="form.customerName" placeholder="请输入客户姓名" />
                 </el-form-item>
               </el-col>
             </el-row>
             <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="联系电话">
-                  <el-input v-model="form.phone" :disabled="true" style="color:#9ca3af" />
+                  <el-input v-model="form.phone" placeholder="请输入联系电话" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
                 <el-form-item label="关联账户">
-                  <el-input v-model="form.accountNo" :disabled="true" style="color:#9ca3af" />
+                  <el-input v-model="form.accountNo" placeholder="请输入关联账户" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -192,18 +192,39 @@
               <el-upload
                 class="upload-demo"
                 drag
-                action="https://jsonplaceholder.typicode.com/posts/"
+                :action="uploadUrl"
                 :on-preview="handlePreview"
                 :on-remove="handleRemove"
+                :on-success="handleUploadSuccess"
+                :on-error="handleUploadError"
                 :file-list="fileList"
+                :auto-upload="false"
+                :limit="5"
+                accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx"
+                ref="uploadRef"
               >
                 <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
                 <div class="el-upload__text">点击或拖拽上传附件</div>
+                <template #tip>
+                  <div class="el-upload__tip">支持jpg、png、gif、pdf、doc、docx、xls、xlsx格式，最多上传5个文件</div>
+                </template>
               </el-upload>
+              <el-dialog v-model="previewDialogVisible" title="附件预览" width="60%" top="10vh">
+                <img v-if="previewType === 'image'" :src="previewUrl" class="preview-image" />
+                <iframe v-else-if="previewType === 'pdf'" :src="previewUrl" class="preview-pdf" />
+                <div v-else class="preview-other">
+                  <el-icon size="64" color="#9ca3af"><Document /></el-icon>
+                  <p style="margin-top:16px;color:#6b7280">无法预览此类型文件，请下载查看</p>
+                </div>
+                <template #footer>
+                  <el-button @click="previewDialogVisible = false">关闭</el-button>
+                  <el-button type="primary" @click="downloadAttachment">下载</el-button>
+                </template>
+              </el-dialog>
             </el-form-item>
             <el-form-item style="margin-top:24px">
-              <el-button type="primary">提交工单</el-button>
-              <el-button type="default">保存草稿</el-button>
+              <el-button type="primary" @click="submitTicket" :loading="submitLoading">提交工单</el-button>
+              <el-button type="default" @click="saveDraft">保存草稿</el-button>
               <el-button @click="$router.back()">取消</el-button>
             </el-form-item>
           </el-form>
@@ -216,12 +237,12 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { UploadFilled } from '@element-plus/icons-vue'
+import { UploadFilled, Document } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { QuillEditor } from '@vueup/vue-quill'
 import '@vueup/vue-quill/dist/vue-quill.snow.css'
 import AppLayout from '@/components/AppLayout.vue'
-import { analyzeTitle } from '@/api/ticket'
+import { analyzeTitle, createTicket } from '@/api/ticket'
 
 const router = useRouter()
 
@@ -241,6 +262,12 @@ const form = reactive({
 const showAIPanel = ref(false)
 const fileList = ref([])
 const aiLoading = ref(false)
+const uploadRef = ref(null)
+const previewDialogVisible = ref(false)
+const previewUrl = ref('')
+const previewType = ref('other')
+const previewFileId = ref(null)
+const submitLoading = ref(false)
 let debounceTimer = null
 
 const aiData = reactive({
@@ -454,6 +481,8 @@ const getTicketTypeTag = (type) => {
   return typeMap[type] || 'info'
 }
 
+const uploadUrl = ref('/api/attachments/upload/0')
+
 const handleRemove = (file) => {
   const index = fileList.value.indexOf(file)
   if (index > -1) {
@@ -462,7 +491,126 @@ const handleRemove = (file) => {
 }
 
 const handlePreview = (file) => {
-  console.log(file)
+  if (file.response && file.response.data && file.response.data.id) {
+    previewFileId.value = file.response.data.id
+    const url = `/api/attachments/preview/${file.response.data.id}`
+    previewUrl.value = url
+    
+    const fileName = file.name.toLowerCase()
+    if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png') || fileName.endsWith('.gif')) {
+      previewType.value = 'image'
+    } else if (fileName.endsWith('.pdf')) {
+      previewType.value = 'pdf'
+    } else {
+      previewType.value = 'other'
+    }
+    previewDialogVisible.value = true
+  } else if (file.raw) {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      previewUrl.value = e.target.result
+      const fileName = file.name.toLowerCase()
+      if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png') || fileName.endsWith('.gif')) {
+        previewType.value = 'image'
+      } else {
+        previewType.value = 'other'
+      }
+      previewDialogVisible.value = true
+    }
+    reader.readAsDataURL(file.raw)
+  }
+}
+
+const downloadAttachment = () => {
+  if (previewFileId.value) {
+    window.open(`/api/attachments/download/${previewFileId.value}`, '_blank')
+  }
+}
+
+const handleUploadSuccess = (response, file, fileList) => {
+  ElMessage.success(`${file.name} 上传成功`)
+}
+
+const handleUploadError = (error, file, fileList) => {
+  ElMessage.error(`${file.name} 上传失败`)
+}
+
+const submitTicket = async () => {
+  if (!form.title.trim()) {
+    ElMessage.warning('请输入工单标题')
+    return
+  }
+  if (!form.type) {
+    ElMessage.warning('请选择工单类型')
+    return
+  }
+  if (!form.urgency) {
+    ElMessage.warning('请选择紧急程度')
+    return
+  }
+  if (!form.description.trim()) {
+    ElMessage.warning('请填写问题描述')
+    return
+  }
+  
+  submitLoading.value = true
+  
+  try {
+    const filesToUpload = fileList.value.filter(f => f.raw)
+    if (filesToUpload.length > 0) {
+      const formData = new FormData()
+      formData.append('title', form.title)
+      formData.append('type', form.type)
+      formData.append('urgency', form.urgency)
+      if (form.channel) formData.append('channel', form.channel)
+      if (form.department) formData.append('department', form.department)
+      if (form.customerNo) formData.append('customerNo', form.customerNo)
+      if (form.customerName) formData.append('customerName', form.customerName)
+      if (form.phone) formData.append('phone', form.phone)
+      if (form.accountNo) formData.append('accountNo', form.accountNo)
+      formData.append('description', form.description)
+      
+      filesToUpload.forEach(file => {
+        formData.append('files', file.raw)
+      })
+      
+      const res = await fetch('/api/tickets/with-attachments', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + localStorage.getItem('token')
+        },
+        body: formData
+      })
+      
+      const data = await res.json()
+      if (data.code === 200) {
+        ElMessage.success('工单创建成功')
+        router.push('/ticket-list')
+      } else {
+        ElMessage.error(data.message || '创建失败')
+      }
+    } else {
+      const res = await createTicket(form)
+      if (res.data) {
+        ElMessage.success('工单创建成功')
+        router.push('/ticket-list')
+      }
+    }
+  } catch (error) {
+    console.error('提交工单失败', error)
+    ElMessage.error('提交工单失败，请稍后重试')
+  } finally {
+    submitLoading.value = false
+  }
+}
+
+const saveDraft = () => {
+  if (!form.title.trim()) {
+    ElMessage.warning('请至少输入工单标题')
+    return
+  }
+  saveFormData()
+  ElMessage.success('草稿已保存')
 }
 </script>
 
@@ -736,5 +884,26 @@ const handlePreview = (file) => {
 
 .ai-chat-panel {
   animation: fadeIn 0.3s ease;
+}
+
+.preview-image {
+  width: 100%;
+  height: auto;
+  max-height: 60vh;
+  object-fit: contain;
+}
+
+.preview-pdf {
+  width: 100%;
+  height: 60vh;
+  border: none;
+}
+
+.preview-other {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
 }
 </style>

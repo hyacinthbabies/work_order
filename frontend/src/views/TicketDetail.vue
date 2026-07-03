@@ -1,33 +1,36 @@
 <template>
   <AppLayout>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <h2 style="font-size:18px;font-weight:800">{{ ticketInfo.ticketNo }}</h2>
-          <el-tag type="danger">紧急</el-tag>
-          <el-tag type="warning">处理中</el-tag>
-          <el-tag type="primary">电话银行</el-tag>
-        </div>
-        <p style="font-size:13px;color:#6b7280;margin-top:4px">{{ ticketInfo.title }} · 创建于 {{ ticketInfo.createTime }} · SLA剩余 {{ ticketInfo.slaRemaining }}</p>
-      </div>
-      <div style="display:flex;gap:8px">
-        <el-button type="default" size="small">转交</el-button>
-        <el-button type="default" size="small">升级</el-button>
-        <el-button type="success" size="small">完结申请</el-button>
-      </div>
+    <div v-if="loading" style="display:flex;justify-content:center;align-items:center;height:300px">
+      <el-loading-spinner />
     </div>
-
-    <el-card style="margin-bottom:16px">
-      <div class="workflow-steps">
-        <div v-for="(step, index) in workflowSteps" :key="index" class="workflow-step" :class="{ completed: step.completed, active: step.active }">
-          <div class="step-circle">{{ step.completed ? '✓' : index + 1 }}</div>
-          <div class="step-label">{{ step.label }}</div>
-          <div class="step-time">{{ step.time }}</div>
+    <div v-else>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <h2 style="font-size:18px;font-weight:800">{{ ticketInfo.ticketNo }}</h2>
+            <el-tag v-for="tag in getStatusTags" :key="tag.text" :type="tag.type">{{ tag.text }}</el-tag>
+          </div>
+          <p style="font-size:13px;color:#6b7280;margin-top:4px">{{ ticketInfo.title }} · 创建于 {{ ticketInfo.createTime }} · SLA剩余 {{ ticketInfo.slaRemaining }}</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <el-button type="default" size="small">转交</el-button>
+          <el-button type="default" size="small">升级</el-button>
+          <el-button type="success" size="small">完结申请</el-button>
+          <el-button v-if="canRevoke" type="danger" size="small" @click="showRevokeDialog = true">撤销工单</el-button>
         </div>
       </div>
-    </el-card>
 
-    <div class="detail-layout">
+      <el-card style="margin-bottom:16px">
+        <div class="workflow-steps">
+          <div v-for="(step, index) in workflowSteps" :key="index" class="workflow-step" :class="{ completed: step.completed, active: step.active }">
+            <div class="step-circle">{{ step.completed ? '✓' : index + 1 }}</div>
+            <div class="step-label">{{ step.label }}</div>
+            <div class="step-time">{{ step.time }}</div>
+          </div>
+        </div>
+      </el-card>
+
+      <div class="detail-layout">
       <div class="detail-main">
         <el-card style="margin-bottom:16px">
           <template #header>
@@ -61,7 +64,7 @@
           </template>
           <div style="font-size:13px;line-height:1.8">
             <p><strong>问题描述：</strong></p>
-            <p style="color:#4b5563;margin-bottom:12px">{{ ticketInfo.description }}</p>
+            <div class="rich-text-content" v-html="ticketInfo.description"></div>
             <p><strong>交易信息：</strong></p>
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:6px;font-size:12px">
               <div>交易流水号：<span class="masked-full">{{ ticketInfo.transactionNo }}</span></div>
@@ -103,7 +106,12 @@
 
         <div class="assistant-section">
           <h5>🔍 问题分析</h5>
-          <div class="assistant-card">
+          <div v-if="aiAnalysis" class="assistant-card">
+            <div class="ac-title">{{ aiAnalysis.analysisTitle }}</div>
+            <div class="ac-text">{{ aiAnalysis.problemAnalysis }}</div>
+            <div><span class="ac-tag" style="background:#dbeafe;color:#1d4ed8">{{ aiAnalysis.department }}</span><span class="ac-tag" style="background:#fee2e2;color:#dc2626">{{ aiAnalysis.urgency }}</span></div>
+          </div>
+          <div v-else class="assistant-card">
             <div class="ac-title">转账超时但已扣款</div>
             <div class="ac-text">核心系统交易状态：处理中<br>资金位置：清算过渡户<br>原因分析：跨行转账通道超时</div>
             <div><span class="ac-tag" style="background:#dbeafe;color:#1d4ed8">零售业务</span><span class="ac-tag" style="background:#fee2e2;color:#dc2626">资金安全</span></div>
@@ -137,13 +145,25 @@
 
         <div class="assistant-section">
           <h5>📚 知识库推荐</h5>
-          <div class="assistant-card">
+          <div v-if="loadingArticles" class="assistant-card">
+            <div class="typing-indicator">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+          <div v-else-if="knowledgeArticles.length > 0">
+            <div v-for="article in knowledgeArticles" :key="article.id" class="assistant-card" style="cursor:pointer" @click="showArticle(article)">
+              <div class="ac-title">{{ article.title }}</div>
+              <div class="ac-text">{{ article.summary }}</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+                <el-tag size="small" type="primary">{{ article.category }}</el-tag>
+                <span style="font-size:11px;color:#9ca3af">浏览 {{ article.viewCount || 0 }} 次</span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="assistant-card" style="cursor:pointer" @click="showDefaultArticle()">
             <div class="ac-title">《跨行转账超时处理操作指引》</div>
             <div class="ac-text">详细说明转账超时的排查步骤、调账流程和客户话术。</div>
-          </div>
-          <div class="assistant-card">
-            <div class="ac-title">《资金调账申请操作手册》</div>
-            <div class="ac-text">调账申请的填写规范、审批流程和时效要求。</div>
+            <div style="font-size:11px;color:#1a56db;margin-top:6px">📋 点击查看详情</div>
           </div>
         </div>
 
@@ -164,57 +184,382 @@
         </div>
       </div>
     </div>
+
+    <el-dialog v-model="articleDialogVisible" :title="currentArticle?.title || '知识库文章'" width="700px">
+      <div v-if="currentArticle" style="font-size:14px;line-height:1.8">
+        <div style="display:flex;gap:16px;margin-bottom:16px;color:#6b7280;font-size:12px">
+          <span>📁 {{ currentArticle.category }}</span>
+          <span>👤 {{ currentArticle.author }}</span>
+          <span>📊 浏览 {{ currentArticle.viewCount || 0 }} 次</span>
+        </div>
+        <div style="margin-bottom:16px;padding:12px;background:#f3f4f6;border-radius:8px">
+          <strong>摘要：</strong>{{ currentArticle.summary }}
+        </div>
+        <div class="markdown-content" v-html="renderMarkdown(currentArticle.content)"></div>
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb">
+          <div style="font-size:12px;color:#6b7280">
+            <strong>标签：</strong>
+            <el-tag v-for="tag in (currentArticle.tags || '').split(',')" :key="tag" size="small" style="margin: 2px" type="info">{{ tag }}</el-tag>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="showRevokeDialog" title="撤销工单" width="500px" :close-on-click-modal="false">
+      <div style="font-size:14px;color:#6b7280;margin-bottom:16px">
+        <p>撤销工单将将工单状态改为"已撤销"，此操作不可恢复。</p>
+        <p style="margin-top:8px;color:#dc2626">⚠️ 请确认是否继续撤销此工单？</p>
+      </div>
+      <el-form-item label="撤销原因" required>
+        <el-select v-model="revokeReason" style="width:100%">
+          <el-option label="客户主动撤回" value="客户主动撤回" />
+          <el-option label="工单重复创建" value="工单重复创建" />
+          <el-option label="问题已自行解决" value="问题已自行解决" />
+          <el-option label="信息填写错误" value="信息填写错误" />
+          <el-option label="其他原因" value="其他原因" />
+        </el-select>
+      </el-form-item>
+      <el-form-item v-if="revokeReason === '其他原因'" label="详细说明">
+        <el-input v-model="revokeReasonDetail" type="textarea" :rows="3" placeholder="请输入详细的撤销原因..." />
+      </el-form-item>
+      <template #footer>
+        <el-button @click="showRevokeDialog = false">取消</el-button>
+        <el-button type="danger" @click="confirmRevoke" :loading="revoking">确认撤销</el-button>
+      </template>
+    </el-dialog>
+    </div>
   </AppLayout>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import AppLayout from '@/components/AppLayout.vue'
+import { findRelatedArticles, analyzeTitle, getTicketById, revokeTicket } from '@/api/ticket'
+import { marked } from 'marked'
 
+marked.setOptions({
+  gfm: true,
+  breaks: true
+})
+
+const route = useRoute()
+
+const renderMarkdown = (text) => {
+  if (!text) return ''
+  return marked.parse(text)
+}
+
+const loading = ref(true)
 const ticketInfo = reactive({
-  ticketNo: 'WO20250528001',
-  title: '转账失败，资金未到账',
-  createTime: '2025-05-28 09:15',
-  slaRemaining: '1h 23min',
-  customerNo: 'C20230045678',
-  customerName: '李*明',
-  customerType: '个人客户（金卡）',
-  idCard: '110101**********1234',
-  phone: '138****5678',
-  address: '北京市朝阳区***路***号',
-  cardNo: '6222 0123 **** **** 0123',
-  balance: '¥ ****.**',
-  riskLevel: '低风险',
-  description: '客户李先生反映5月28日上午9:10通过手机银行向尾号5678的账户转账5000元，操作显示交易超时，但查询银行卡余额发现5000元已被扣减，收款方表示未收到款项。客户情绪较为激动，要求尽快查明原因并退回资金。',
-  transactionNo: 'TXN20250528****5678',
-  amount: '¥ ****.**',
-  receiverAccount: '6222 **** **** 5678',
-  transactionTime: '2025-05-28 09:10:23'
+  id: '',
+  ticketNo: '',
+  title: '',
+  createTime: '',
+  slaRemaining: '',
+  customerNo: '',
+  customerName: '',
+  customerType: '',
+  idCard: '',
+  phone: '',
+  address: '',
+  cardNo: '',
+  balance: '',
+  riskLevel: '',
+  description: '',
+  transactionNo: '',
+  amount: '',
+  receiverAccount: '',
+  transactionTime: '',
+  type: '',
+  status: '',
+  urgency: '',
+  department: '',
+  channel: '',
+  createdBy: ''
 })
 
 const workflowSteps = ref([
-  { label: '工单创建', time: '09:15', completed: true, active: false },
-  { label: '智能分类', time: '09:15', completed: true, active: false },
-  { label: '自动派单', time: '09:15', completed: true, active: false },
-  { label: '处理中', time: '进行中', completed: false, active: true },
+  { label: '工单创建', time: '-', completed: false, active: false },
+  { label: '智能分类', time: '-', completed: false, active: false },
+  { label: '自动派单', time: '-', completed: false, active: false },
+  { label: '处理中', time: '-', completed: false, active: false },
   { label: '待审批', time: '-', completed: false, active: false },
   { label: '待回复', time: '-', completed: false, active: false },
-  { label: '已结案', time: '-', completed: false, active: false }
+  { label: '已结案', time: '-', completed: false, active: false },
+  { label: '已撤销', time: '-', completed: false, active: false }
 ])
 
-const timelineItems = ref([
-  { time: '2025-05-28 09:15', user: '系统（AI自动）', content: '🤖 <strong>智能分类</strong>：零售业务 → 转账汇款 → 交易异常 | 置信度 96.8%', type: 'system' },
-  { time: '2025-05-28 09:15', user: '系统（AI自动）', content: '🤖 <strong>智能派单</strong>：自动派发至零售业务部 → 张三（技能匹配度 95%，当前负载低）', type: 'system' },
-  { time: '2025-05-28 09:20', user: '张三（一线客服）', content: '已接单，正在查询核心系统交易状态。已联系客户安抚情绪。', type: 'user' },
-  { time: '2025-05-28 09:35', user: '张三（一线客服）', content: '经查询核心系统，交易状态为"处理中"，资金暂挂在清算过渡户。已提交内部调账申请，预计2小时内完成。', type: 'user' }
-])
+const timelineItems = ref([])
+
+const ticketStatus = computed(() => ticketInfo.status || '待处理')
+
+const currentUser = computed(() => {
+  const userStr = localStorage.getItem('user')
+  return userStr ? JSON.parse(userStr) : null
+})
+
+const canRevoke = computed(() => {
+  const status = ticketStatus.value
+  const statusValid = status !== '已结案' && status !== '已完成' && status !== '已撤销'
+  const userValid = currentUser.value && ticketInfo.createdBy && 
+    currentUser.value.username === ticketInfo.createdBy
+  return statusValid && userValid
+})
+
+const showRevokeDialog = ref(false)
+const revokeReason = ref('')
+const revokeReasonDetail = ref('')
+const revoking = ref(false)
+
+const getStatusTags = computed(() => {
+  const tags = []
+  if (ticketInfo.urgency) {
+    tags.push({ type: ticketInfo.urgency === '紧急' ? 'danger' : ticketInfo.urgency === '一般' ? 'warning' : 'info', text: ticketInfo.urgency })
+  }
+  if (ticketStatus.value) {
+    let statusType = 'primary'
+    if (ticketStatus.value === '已结案' || ticketStatus.value === '已完成') {
+      statusType = 'success'
+    } else if (ticketStatus.value === '处理中') {
+      statusType = 'warning'
+    } else if (ticketStatus.value === '已撤销') {
+      statusType = 'danger'
+    }
+    tags.push({ type: statusType, text: ticketStatus.value })
+  }
+  if (ticketInfo.channel) {
+    tags.push({ type: 'primary', text: ticketInfo.channel })
+  }
+  return tags
+})
+
+const loadTicketDetail = async () => {
+  const ticketId = route.params.id
+  if (!ticketId) return
+  
+  loading.value = true
+  try {
+    const res = await getTicketById(ticketId)
+    const data = res.data || {}
+    
+    ticketInfo.id = data.id || ''
+    ticketInfo.ticketNo = data.ticketNo || ''
+    ticketInfo.title = data.title || ''
+    ticketInfo.createTime = data.createTime || ''
+    ticketInfo.slaRemaining = '1h 23min'
+    ticketInfo.customerNo = data.customerNo || ''
+    ticketInfo.customerName = maskName(data.customerName || '')
+    ticketInfo.customerType = data.customerType || ''
+    ticketInfo.idCard = maskIdCard(data.idCard || '')
+    ticketInfo.phone = maskPhone(data.phone || '')
+    ticketInfo.address = maskAddress(data.address || '')
+    ticketInfo.cardNo = maskCard(data.cardNo || '')
+    ticketInfo.balance = '¥ ****.**'
+    ticketInfo.riskLevel = '低风险'
+    ticketInfo.description = data.description || ''
+    ticketInfo.transactionNo = maskTransaction(data.transactionNo || '')
+    ticketInfo.amount = '¥ ****.**'
+    ticketInfo.receiverAccount = maskCard(data.receiverAccount || '')
+    ticketInfo.transactionTime = data.transactionTime || ''
+    ticketInfo.type = data.type || ''
+    ticketInfo.status = data.status || ''
+    ticketInfo.urgency = data.urgency || ''
+    ticketInfo.department = data.department || ''
+    ticketInfo.channel = data.channel || ''
+    ticketInfo.createdBy = data.createdBy || ''
+    
+    initWorkflow()
+    initTimeline(data)
+    
+    loadKnowledgeArticles()
+    loadAIAnalysis()
+  } catch (error) {
+    console.error('加载工单详情失败', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+const maskName = (name) => {
+  if (!name || name.length <= 1) return name
+  return name[0] + '*' + name.slice(-1)
+}
+
+const maskIdCard = (id) => {
+  if (!id || id.length < 8) return id
+  return id.slice(0, 6) + '**********' + id.slice(-4)
+}
+
+const maskPhone = (phone) => {
+  if (!phone || phone.length < 7) return phone
+  return phone.slice(0, 3) + '****' + phone.slice(-4)
+}
+
+const maskAddress = (addr) => {
+  if (!addr) return addr
+  const parts = addr.split('')
+  if (parts.length <= 6) return addr
+  return addr.slice(0, 6) + '***' + addr.slice(-2)
+}
+
+const maskCard = (card) => {
+  if (!card) return card
+  const cleaned = card.replace(/\s/g, '')
+  if (cleaned.length < 8) return card
+  return cleaned.slice(0, 4) + ' **** **** ' + cleaned.slice(-4)
+}
+
+const maskTransaction = (no) => {
+  if (!no || no.length < 8) return no
+  return no.slice(0, 8) + '****' + no.slice(-4)
+}
+
+const initWorkflow = () => {
+  const status = ticketStatus.value
+  const steps = [
+    { label: '工单创建', time: ticketInfo.createTime.split(' ')[1] || '09:15', completed: true, active: false },
+    { label: '智能分类', time: ticketInfo.createTime.split(' ')[1] || '09:15', completed: true, active: false },
+    { label: '自动派单', time: ticketInfo.createTime.split(' ')[1] || '09:15', completed: true, active: false },
+    { label: '处理中', time: status === '处理中' ? '进行中' : '-', completed: status === '已结案' || status === '待审批' || status === '待回复' || status === '已撤销', active: status === '处理中' },
+    { label: '待审批', time: status === '待审批' ? '进行中' : '-', completed: status === '已结案' || status === '待回复' || status === '已撤销', active: status === '待审批' },
+    { label: '待回复', time: status === '待回复' ? '进行中' : '-', completed: status === '已结案' || status === '已撤销', active: status === '待回复' },
+    { label: '已结案', time: status === '已结案' ? ticketInfo.updateTime || '-' : '-', completed: status === '已结案', active: false },
+    { label: '已撤销', time: status === '已撤销' ? ticketInfo.updateTime || '-' : '-', completed: status === '已撤销', active: false }
+  ]
+  workflowSteps.value = steps
+}
+
+const initTimeline = (data) => {
+  const items = []
+  
+  items.push({
+    time: data.createTime || '',
+    user: '系统（AI自动）',
+    content: `🤖 <strong>智能分类</strong>：${data.department || '零售业务'} → ${data.type || '交易异常'} | 置信度 96.8%`,
+    type: 'system'
+  })
+  
+  items.push({
+    time: data.createTime || '',
+    user: '系统（AI自动）',
+    content: `🤖 <strong>智能派单</strong>：自动派发至 ${data.department || '零售业务部'} → 张三（技能匹配度 95%，当前负载低）`,
+    type: 'system'
+  })
+  
+  if (data.status === '处理中') {
+    items.push({
+      time: new Date().toLocaleString('zh-CN'),
+      user: '张三（一线客服）',
+      content: '已接单，正在查询核心系统交易状态。已联系客户安抚情绪。',
+      type: 'user'
+    })
+  }
+  
+  if (data.status === '已结案') {
+    items.push({
+      time: new Date().toLocaleString('zh-CN'),
+      user: '张三（一线客服）',
+      content: '工单已处理完成，客户反馈满意。',
+      type: 'user'
+    })
+  }
+  
+  timelineItems.value = items
+}
 
 const remark = ref('')
+
+const knowledgeArticles = ref([])
+const aiAnalysis = ref(null)
+const loadingArticles = ref(false)
+
+const loadKnowledgeArticles = async () => {
+  loadingArticles.value = true
+  try {
+    const res = await findRelatedArticles(ticketInfo.title)
+    knowledgeArticles.value = res.data || []
+  } catch (error) {
+    console.error('加载知识库文章失败', error)
+  } finally {
+    loadingArticles.value = false
+  }
+}
+
+const loadAIAnalysis = async () => {
+  try {
+    const res = await analyzeTitle(ticketInfo.title)
+    aiAnalysis.value = res.data || null
+  } catch (error) {
+    console.error('AI分析失败', error)
+  }
+}
 
 const copyText = () => {
   const text = '李先生您好，您反映的转账问题我们已经受理。经查询，您的资金目前在银行内部处理中，是安全的。我们已为您加急处理，预计2小时内资金将退回您的账户，届时我们会第一时间通知您。非常抱歉给您带来不便。'
   navigator.clipboard.writeText(text)
 }
+
+const currentArticle = ref(null)
+const articleDialogVisible = ref(false)
+
+const showArticle = (article) => {
+  currentArticle.value = article
+  articleDialogVisible.value = true
+}
+
+const showDefaultArticle = () => {
+  currentArticle.value = {
+    title: '跨行转账超时处理操作指引',
+    category: '转账汇款',
+    author: '信息科技部',
+    viewCount: 1258,
+    summary: '详细说明跨行转账超时的排查步骤、调账流程和客户沟通话术',
+    tags: '转账,汇款,超时,调账,跨行',
+    content: '## 跨行转账超时处理操作指引\n\n### 一、问题定位\n1. 登录核心银行系统查询交易状态\n2. 确认资金当前位置（过渡户/已扣款/未扣款）\n3. 检查通道状态和清算进度\n\n### 二、处理方案\n\n#### 方案一：发起调账（推荐）\n- 适用场景：资金已扣款但未到账\n- 操作步骤：\n  1. 在调账系统提交调账申请\n  2. 选择\"跨行转账超时\"调账类型\n  3. 填写交易流水号和金额\n  4. 提交审批\n- 预计时效：2小时内完成\n\n#### 方案二：等待自动冲正\n- 适用场景：系统正在处理中\n- 说明：如交易最终失败，系统会自动冲正\n- 等待时间：最长24小时\n\n### 三、客户沟通话术\n\"XX先生/女士您好，您反映的转账问题我们已经受理。经查询，您的资金目前在银行内部处理中，是安全的。我们已为您加急处理，预计2小时内资金将退回您的账户，届时我们会第一时间通知您。\"\n\n### 四、注意事项\n1. 及时处理，避免超时\n2. 使用标准话术，不承诺具体到账时间\n3. 做好记录，便于后续跟进'
+  }
+  articleDialogVisible.value = true
+}
+
+const confirmRevoke = async () => {
+  if (!revokeReason.value) {
+    ElMessage.warning('请选择撤销原因')
+    return
+  }
+  
+  let reason = revokeReason.value
+  if (revokeReason.value === '其他原因' && revokeReasonDetail.value) {
+    reason += ' - ' + revokeReasonDetail.value
+  }
+  
+  revoking.value = true
+  
+  try {
+    const res = await revokeTicket(ticketInfo.id, { reason })
+    if (res.data) {
+      ElMessage.success('工单已撤销')
+      showRevokeDialog.value = false
+      ticketInfo.status = '已撤销'
+      initWorkflow()
+      timelineItems.value.push({
+        time: new Date().toLocaleString('zh-CN'),
+        user: '系统',
+        content: `工单已撤销，撤销原因：${reason}`,
+        type: 'system'
+      })
+    }
+  } catch (error) {
+    console.error('撤销工单失败', error)
+    ElMessage.error(error.response?.data?.message || '撤销工单失败')
+  } finally {
+    revoking.value = false
+  }
+}
+
+onMounted(() => {
+  loadTicketDetail()
+})
 </script>
 
 <style scoped>
@@ -497,5 +842,182 @@ const copyText = () => {
     border-left: none;
     border-top: 1px solid #e5e7eb;
   }
+}
+
+.markdown-content {
+  line-height: 1.8;
+  color: #374151;
+}
+
+.markdown-content h1 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 20px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #1a56db;
+  color: #1a56db;
+}
+
+.markdown-content h2 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 18px 0 10px;
+  color: #1f2937;
+}
+
+.markdown-content h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 14px 0 8px;
+  color: #374151;
+}
+
+.markdown-content p {
+  margin: 8px 0;
+}
+
+.markdown-content ul, .markdown-content ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.markdown-content li {
+  margin: 4px 0;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.markdown-content em {
+  font-style: italic;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid #1a56db;
+  padding: 8px 16px;
+  background: #eff6ff;
+  margin: 12px 0;
+  border-radius: 0 8px 8px 0;
+}
+
+.markdown-content code {
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: monospace;
+}
+
+.markdown-content pre {
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.markdown-content pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+.markdown-content th, .markdown-content td {
+  border: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.markdown-content th {
+  background: #f9fafb;
+  font-weight: 600;
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 16px 0;
+}
+
+.markdown-content a {
+  color: #1a56db;
+  text-decoration: underline;
+}
+
+.markdown-content img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.rich-text-content {
+  font-size: 13px;
+  line-height: 1.8;
+  color: #4b5563;
+  margin-bottom: 12px;
+}
+
+.rich-text-content p {
+  margin: 6px 0;
+}
+
+.rich-text-content strong {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.rich-text-content ul, .rich-text-content ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.rich-text-content li {
+  margin: 4px 0;
+}
+
+.rich-text-content h1, .rich-text-content h2, .rich-text-content h3 {
+  font-weight: 600;
+  margin: 12px 0 6px;
+}
+
+.rich-text-content h1 {
+  font-size: 18px;
+  border-bottom: 2px solid #1a56db;
+  padding-bottom: 4px;
+}
+
+.rich-text-content h2 {
+  font-size: 15px;
+}
+
+.rich-text-content h3 {
+  font-size: 14px;
+}
+
+.rich-text-content blockquote {
+  border-left: 4px solid #1a56db;
+  padding: 8px 16px;
+  background: #eff6ff;
+  margin: 12px 0;
+  border-radius: 0 8px 8px 0;
+}
+
+.rich-text-content a {
+  color: #1a56db;
+  text-decoration: underline;
+}
+
+.rich-text-content img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 8px 0;
 }
 </style>

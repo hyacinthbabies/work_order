@@ -6,6 +6,8 @@ import com.njbank.ticket.entity.Ticket;
 import com.njbank.ticket.repository.TicketRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -37,6 +39,10 @@ public class TicketServiceImpl implements TicketService {
     
     @Override
     public TicketDTO createTicket(TicketCreateRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String currentUser = authentication != null && authentication.getPrincipal() != null 
+                ? authentication.getPrincipal().toString() : "admin";
+        
         Ticket ticket = Ticket.builder()
                 .ticketNo(generateTicketNo())
                 .title(request.getTitle())
@@ -49,7 +55,7 @@ public class TicketServiceImpl implements TicketService {
                 .customerName(request.getCustomerName())
                 .phone(request.getPhone())
                 .accountNo(request.getAccountNo())
-                .createdBy("admin")
+                .createdBy(currentUser)
                 .status("待处理")
                 .build();
         
@@ -96,6 +102,36 @@ public class TicketServiceImpl implements TicketService {
             throw new RuntimeException("工单不存在");
         }
         ticketRepository.deleteById(id);
+    }
+    
+    @Override
+    public TicketDTO revokeTicket(Long id, String reason) {
+        Ticket ticket = ticketRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("工单不存在"));
+        
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getPrincipal() == null) {
+            throw new RuntimeException("请先登录");
+        }
+        String currentUser = authentication.getPrincipal().toString();
+        
+        if (!currentUser.equals(ticket.getCreatedBy())) {
+            throw new RuntimeException("只有工单创建人才能撤销工单");
+        }
+        
+        if ("已撤销".equals(ticket.getStatus())) {
+            throw new RuntimeException("工单已被撤销");
+        }
+        
+        if ("已结案".equals(ticket.getStatus()) || "已完成".equals(ticket.getStatus())) {
+            throw new RuntimeException("已完结的工单不能撤销");
+        }
+        
+        ticket.setStatus("已撤销");
+        ticket.setDescription(ticket.getDescription() + "\n\n【撤销原因】：" + reason);
+        
+        Ticket updated = ticketRepository.save(ticket);
+        return convertToDTO(updated);
     }
     
     private String generateTicketNo() {

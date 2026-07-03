@@ -1,6 +1,7 @@
 package com.njbank.ticket.controller;
 
 import com.njbank.ticket.dto.ApiResponse;
+import com.njbank.ticket.entity.KnowledgeArticle;
 import com.njbank.ticket.entity.KnowledgeKeyword;
 import com.njbank.ticket.entity.KnowledgeSolution;
 import com.njbank.ticket.service.KnowledgeBaseService;
@@ -58,5 +59,41 @@ public class KnowledgeBaseController {
     public ApiResponse<Void> deleteSolution(@PathVariable Long id) {
         knowledgeBaseService.deleteSolution(id);
         return ApiResponse.success(null);
+    }
+
+    @GetMapping("/articles")
+    public ApiResponse<List<KnowledgeArticle>> getAllArticles() {
+        return ApiResponse.success(knowledgeBaseService.getAllArticles());
+    }
+
+    @GetMapping("/articles/category/{category}")
+    public ApiResponse<List<KnowledgeArticle>> getArticlesByCategory(@PathVariable String category) {
+        return ApiResponse.success(knowledgeBaseService.getArticlesByCategory(category));
+    }
+
+    @GetMapping("/articles/{id}")
+    public ApiResponse<KnowledgeArticle> getArticleById(@PathVariable Long id) {
+        return ApiResponse.success(knowledgeBaseService.getArticleById(id));
+    }
+
+    @PostMapping("/articles")
+    public ApiResponse<KnowledgeArticle> saveArticle(@RequestBody KnowledgeArticle article) {
+        return ApiResponse.success(knowledgeBaseService.saveArticle(article));
+    }
+
+    @DeleteMapping("/articles/{id}")
+    public ApiResponse<Void> deleteArticle(@PathVariable Long id) {
+        knowledgeBaseService.deleteArticle(id);
+        return ApiResponse.success(null);
+    }
+
+    @GetMapping("/articles/search")
+    public ApiResponse<List<KnowledgeArticle>> searchArticles(@RequestParam String keyword) {
+        return ApiResponse.success(knowledgeBaseService.searchArticles(keyword));
+    }
+
+    @GetMapping("/articles/related")
+    public ApiResponse<List<KnowledgeArticle>> findRelatedArticles(@RequestParam String keyword) {
+        return ApiResponse.success(knowledgeBaseService.findRelatedArticles(keyword));
     }
 }

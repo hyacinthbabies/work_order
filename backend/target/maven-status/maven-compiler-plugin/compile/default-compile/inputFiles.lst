@@ -3,6 +3,7 @@
 /Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/dto/LoginResponse.java
 /Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/service/UserServiceImpl.java
 /Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/service/TicketServiceImpl.java
+/Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/entity/KnowledgeArticle.java
 /Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/service/UserService.java
 /Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/entity/KnowledgeSolution.java
 /Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/repository/UserRepository.java
@@ -26,6 +27,7 @@
 /Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/controller/AIController.java
 /Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/controller/TicketController.java
 /Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/dto/ApiResponse.java
+/Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/repository/KnowledgeArticleRepository.java
 /Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/entity/TicketLog.java
 /Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/entity/KnowledgeKeyword.java
 /Users/hyacunth/Desktop/workplace/work_order/backend/src/main/java/com/njbank/ticket/service/AIServiceImpl.java

@@ -11,4 +11,5 @@ public interface TicketService {
     TicketDTO createTicket(TicketCreateRequest request);
     TicketDTO updateTicket(Long id, TicketCreateRequest request);
     void deleteTicket(Long id);
+    TicketDTO revokeTicket(Long id, String reason);
 }

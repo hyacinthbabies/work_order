@@ -35,7 +35,9 @@ com/njbank/ticket/dto/ApiResponse$ApiResponseBuilder.class
 com/njbank/ticket/service/AIServiceImpl.class
 com/njbank/ticket/entity/Ticket$TicketBuilder.class
 com/njbank/ticket/dto/LoginResponse$LoginResponseBuilder.class
+com/njbank/ticket/entity/KnowledgeArticle$KnowledgeArticleBuilder.class
 com/njbank/ticket/entity/KnowledgeKeyword.class
+com/njbank/ticket/repository/KnowledgeArticleRepository.class
 com/njbank/ticket/security/SecurityConfig.class
 com/njbank/ticket/dto/TicketCreateRequest.class
 com/njbank/ticket/config/WebConfig.class
@@ -44,6 +46,7 @@ com/njbank/ticket/entity/TicketLog$TicketLogBuilder.class
 com/njbank/ticket/dto/AIAnalysisResponse$AIAnalysisResponseBuilder.class
 com/njbank/ticket/Application.class
 com/njbank/ticket/dto/SimilarTicketDTO$SimilarTicketDTOBuilder.class
+com/njbank/ticket/entity/KnowledgeArticle.class
 com/njbank/ticket/dto/TemplateFieldDTO.class
 com/njbank/ticket/entity/User.class
 com/njbank/ticket/service/AIService.class

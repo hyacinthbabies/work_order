@@ -22,14 +22,21 @@ service.interceptors.response.use(
   response => {
     const res = response.data
     if (res.code !== 200) {
-      return Promise.reject(new Error(res.message || 'Error'))
+      const error = new Error(res.message || 'Error')
+      error.response = { data: res }
+      return Promise.reject(error)
     }
     return res
   },
   error => {
-    if (error.response.status === 401) {
-      localStorage.removeItem('token')
-      window.location.href = '/login'
+    if (error.response) {
+      if (error.response.status === 401) {
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+      }
+      if (error.response.data && error.response.data.message) {
+        error.message = error.response.data.message
+      }
     }
     return Promise.reject(error)
   }
