@@ -30,9 +30,14 @@ public class TicketController {
     @GetMapping
     public ApiResponse<Page<TicketDTO>> getTickets(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String channel,
+            @RequestParam(required = false) String department) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createTime"));
-        Page<TicketDTO> tickets = ticketService.getTickets(pageable);
+        Page<TicketDTO> tickets = ticketService.searchTickets(keyword, status, type, channel, department, pageable);
         return ApiResponse.success(tickets);
     }
     

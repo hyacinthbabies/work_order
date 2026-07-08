@@ -10,6 +10,12 @@ export const getTicketById = (id) => request.get(`/tickets/${id}`)
 
 export const createTicket = (data) => request.post('/tickets', data)
 
+export const createTicketWithAttachments = (formData) => {
+  return request.post('/tickets/with-attachments', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
 export const updateTicket = (id, data) => request.put(`/tickets/${id}`, data)
 
 export const deleteTicket = (id) => request.delete(`/tickets/${id}`)
@@ -117,7 +123,20 @@ export const uploadAttachment = (ticketId, file) => {
 }
 
 export const getAttachmentsByTicketId = (ticketId) => request.get(`/attachments/ticket/${ticketId}`)
+export const getAttachments = (ticketId) => request.get(`/attachments/ticket/${ticketId}`)
 
 export const deleteAttachment = (id) => request.delete(`/attachments/${id}`)
 
 export const revokeTicket = (id, data) => request.put(`/tickets/${id}/revoke`, data)
+
+export const transferTicket = (id, data) => request.put(`/tickets/${id}/transfer`, data)
+
+export const escalateTicket = (id) => request.put(`/tickets/${id}/escalate`)
+
+export const completeTicket = (id, data) => request.put(`/tickets/${id}/complete`, data)
+
+export const getUsersByDepartment = (department) => request.get(`/users/department/${encodeURIComponent(department)}`)
+
+export const getTicketLogs = (ticketId) => request.get(`/ticket-logs/ticket/${ticketId}`)
+
+export const addTicketLog = (data) => request.post('/ticket-logs', data)

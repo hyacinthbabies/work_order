@@ -37,12 +37,13 @@
         <el-option label="信用卡" value="信用卡" />
         <el-option label="风控" value="风控" />
       </el-select>
+      <el-button type="primary" @click="handleSearch">查询</el-button>
       <el-button type="default" @click="resetFilters">重置</el-button>
     </div>
 
     <el-card>
       <el-table :data="ticketList" stripe @selection-change="handleSelectionChange" v-loading="loading">
-        <el-table-column type="selection" width="55" />
+        <!-- <el-table-column type="selection" width="55" /> -->
         <el-table-column prop="ticketNo" label="工单编号" width="140">
           <template #default="{ row }">
             <span style="color:#1a56db;font-weight:600;cursor:pointer" @click="viewDetail(row.id)">{{ row.ticketNo }}</span>
@@ -126,12 +127,13 @@ const loadTickets = async () => {
       page: currentPage.value - 1,
       size: pageSize.value
     }
-    if (searchText.value) params.keyword = searchText.value
-    if (statusFilter.value) params.status = statusFilter.value
-    if (typeFilter.value) params.type = typeFilter.value
-    if (channelFilter.value) params.channel = channelFilter.value
-    if (departmentFilter.value) params.department = departmentFilter.value
+    if (searchText.value && searchText.value.trim()) params.keyword = searchText.value.trim()
+    if (statusFilter.value && statusFilter.value.trim()) params.status = statusFilter.value.trim()
+    if (typeFilter.value && typeFilter.value.trim()) params.type = typeFilter.value.trim()
+    if (channelFilter.value && channelFilter.value.trim()) params.channel = channelFilter.value.trim()
+    if (departmentFilter.value && departmentFilter.value.trim()) params.department = departmentFilter.value.trim()
     
+    console.log('发送的查询参数:', params)
     const res = await getTicketList(params)
     if (res.data && res.data.content) {
       ticketList.value = res.data.content
@@ -162,7 +164,7 @@ const handleTicket = (id) => {
 }
 
 const getTagType = (type) => {
-  const types = { '投诉': 'danger', '咨询': 'warning', '办理': 'primary', '故障': 'info', '风控': 'danger' }
+  const types = { '投诉': 'danger', '咨询': 'warning', '办理': 'info', '故障': 'info', '风控': 'danger' }
   return types[type] || 'info'
 }
 
@@ -183,6 +185,11 @@ const getStatusType = (status) => {
 
 const handleSelectionChange = (val) => {
   console.log('selected:', val)
+}
+
+const handleSearch = () => {
+  currentPage.value = 1
+  loadTickets()
 }
 
 const resetFilters = () => {

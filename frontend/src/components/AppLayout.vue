@@ -60,7 +60,7 @@
             <div class="name">{{ user.name }}</div>
             <div class="role">{{ user.department }} · {{ user.role }}</div>
           </div>
-          <div class="avatar">{{ user.name.charAt(0) }}</div>
+          <div class="avatar" @click="handleLogout" title="点击退出登录">{{ user.name.charAt(0) }}</div>
         </div>
       </header>
       <div class="content">
@@ -98,6 +98,14 @@ const breadcrumbName = computed(() => breadcrumbNames[currentRoute.value] || '')
 
 const navigate = (name) => {
   router.push({ name })
+}
+
+const handleLogout = () => {
+  if (confirm('确定要退出登录吗？')) {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    router.push({ name: 'Login' })
+  }
 }
 </script>
 
@@ -219,6 +227,7 @@ const navigate = (name) => {
   margin-left: 220px;
   flex: 1;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 .top-header {
@@ -264,6 +273,13 @@ const navigate = (name) => {
   justify-content: center;
   font-weight: 700;
   font-size: 13px;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.top-header .user-info .avatar:hover {
+  background: #1a56db;
+  color: #fff;
 }
 
 .top-header .user-info .name {

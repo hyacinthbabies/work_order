@@ -7,15 +7,15 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
         <div>
           <div style="display:flex;align-items:center;gap:8px">
-            <h2 style="font-size:18px;font-weight:800">{{ ticketInfo.ticketNo }}</h2>
-            <el-tag v-for="tag in getStatusTags" :key="tag.text" :type="tag.type">{{ tag.text }}</el-tag>
+            <h2 style="font-size:18px;font-weight:800">{{ ticketInfo?.ticketNo || '加载中...' }}</h2>
+            <el-tag v-for="tag in getStatusTags" :key="tag?.text || 'unknown'" :type="tag?.type">{{ tag?.text }}</el-tag>
           </div>
-          <p style="font-size:13px;color:#6b7280;margin-top:4px">{{ ticketInfo.title }} · 创建于 {{ ticketInfo.createTime }} · SLA剩余 {{ ticketInfo.slaRemaining }}</p>
+          <p style="font-size:13px;color:#6b7280;margin-top:4px">{{ ticketInfo?.title }} · 创建于 {{ ticketInfo?.createTime }} · SLA剩余 {{ ticketInfo?.slaRemaining }}</p>
         </div>
-        <div style="display:flex;gap:8px">
-          <el-button type="default" size="small">转交</el-button>
-          <el-button type="default" size="small">升级</el-button>
-          <el-button type="success" size="small">完结申请</el-button>
+        <div style="display:flex;gap:8px" v-if="isCurrentAssignee">
+          <el-button type="default" size="small" @click="showTransferDialog = true">转交</el-button>
+          <el-button type="warning" size="small" @click="handleEscalate">升级</el-button>
+          <el-button type="success" size="small" @click="showCompleteDialog = true">完结申请</el-button>
           <el-button v-if="canRevoke" type="danger" size="small" @click="showRevokeDialog = true">撤销工单</el-button>
         </div>
       </div>
@@ -37,24 +37,25 @@
             <div class="card-header">
               <h3>👤 客户信息</h3>
               <div style="display:flex;gap:6px">
-                <el-tag size="small">当前权限：一线客服</el-tag>
-                <el-tag type="warning" size="small">🔒 敏感数据已脱敏</el-tag>
+                <el-tag size="small">{{ currentRoleLabel }}</el-tag>
+                <el-tag v-if="needMask" type="warning" size="small">🔒 敏感数据已脱敏</el-tag>
+                <el-tag v-else type="success" size="small">✅ 完整数据权限</el-tag>
               </div>
             </div>
           </template>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:13px">
             <div><span style="color:#6b7280">客户编号</span><br><strong>{{ ticketInfo.customerNo }}</strong></div>
-            <div><span style="color:#6b7280">客户姓名</span><br><span class="masked">{{ ticketInfo.customerName }}</span></div>
+            <div><span style="color:#6b7280">客户姓名</span><br><span :class="{ masked: needMask }">{{ ticketInfo.customerName }}</span></div>
             <div><span style="color:#6b7280">客户类型</span><br>{{ ticketInfo.customerType }}</div>
-            <div><span style="color:#6b7280">身份证号</span><br><span class="masked-full">{{ ticketInfo.idCard }}</span></div>
-            <div><span style="color:#6b7280">手机号码</span><br><span class="masked">{{ ticketInfo.phone }}</span></div>
-            <div><span style="color:#6b7280">联系地址</span><br><span class="masked">{{ ticketInfo.address }}</span></div>
-            <div><span style="color:#6b7280">银行卡号</span><br><span class="masked-full">{{ ticketInfo.cardNo }}</span></div>
-            <div><span style="color:#6b7280">账户余额</span><br><span class="masked">{{ ticketInfo.balance }}</span></div>
+            <div><span style="color:#6b7280">身份证号</span><br><span :class="{ 'masked-full': needMask }">{{ ticketInfo.idCard }}</span></div>
+            <div><span style="color:#6b7280">手机号码</span><br><span :class="{ masked: needMask }">{{ ticketInfo.phone }}</span></div>
+            <div><span style="color:#6b7280">联系地址</span><br><span :class="{ masked: needMask }">{{ ticketInfo.address }}</span></div>
+            <div><span style="color:#6b7280">银行卡号</span><br><span :class="{ 'masked-full': needMask }">{{ ticketInfo.cardNo }}</span></div>
+            <div><span style="color:#6b7280">账户余额</span><br><span :class="{ masked: needMask }">{{ ticketInfo.balance }}</span></div>
             <div><span style="color:#6b7280">风险等级</span><br><el-tag type="success" size="small">{{ ticketInfo.riskLevel }}</el-tag></div>
           </div>
-          <el-alert type="info" :closable="false" style="margin-top:12px;font-size:12px">
-            🔒 <strong>数据脱敏说明</strong>：当前角色为"一线客服"，客户姓名、身份证、手机号、银行卡号、余额等敏感信息已自动脱敏。如需查看完整信息，请联系主管审批。
+          <el-alert v-if="needMask" type="info" :closable="false" style="margin-top:12px;font-size:12px">
+            🔒 <strong>数据脱敏说明</strong>：当前角色为"{{ currentRole }}"，客户姓名、身份证、手机号、银行卡号、余额等敏感信息已自动脱敏。如需查看完整信息，请联系主管审批。
           </el-alert>
         </el-card>
 
@@ -75,6 +76,27 @@
           </div>
         </el-card>
 
+        <el-card v-if="attachments.length > 0" style="margin-bottom:16px">
+          <template #header>
+            <h3>📎 附件</h3>
+          </template>
+          <div class="attachment-list">
+            <div v-for="file in attachments" :key="file?.id || 'unknown'" class="attachment-item">
+              <div class="file-icon">
+                <el-icon size="24" :class="getFileIconClass(file?.fileName)"><Document /></el-icon>
+              </div>
+              <div class="file-info">
+                <div class="file-name">{{ file?.fileName }}</div>
+                <div class="file-size">{{ formatFileSize(file?.fileSize) }} · {{ formatTime(file?.createTime) }}</div>
+              </div>
+              <div class="file-actions">
+                <el-button type="text" size="small" @click="previewAttachment(file)">预览</el-button>
+                <el-button type="text" size="small" @click="downloadAttachment(file)">下载</el-button>
+              </div>
+            </div>
+          </div>
+        </el-card>
+
         <el-card>
           <template #header>
             <h3>📝 处理记录</h3>
@@ -84,7 +106,13 @@
               <div class="tl-dot" :class="{ blue: item.type === 'system', green: item.type === 'user' }"></div>
               <div class="tl-time">{{ item.time }}</div>
               <div class="tl-user">{{ item.user }}</div>
-              <div class="tl-content">{{ item.content }}</div>
+              <div class="tl-content" v-html="item.content"></div>
+            </div>
+            <div v-if="loadingLogs" class="timeline-item">
+              <div class="tl-dot"></div>
+              <div class="typing-indicator" style="margin-left:32px">
+                <span></span><span></span><span></span>
+              </div>
             </div>
           </div>
 
@@ -92,8 +120,8 @@
             <el-input v-model="remark" type="textarea" :rows="3" placeholder="请输入处理备注..." />
           </el-form-item>
           <div style="display:flex;gap:8px">
-            <el-button type="primary" size="small">提交备注</el-button>
-            <el-button type="default" size="small">快捷话术</el-button>
+            <el-button type="primary" size="small" @click="submitRemark" :loading="submitting">提交备注</el-button>
+            <el-button type="default" size="small" @click="showQuickReply">快捷话术</el-button>
           </div>
         </el-card>
       </div>
@@ -120,26 +148,31 @@
 
         <div class="assistant-section">
           <h5>💡 推荐处理方案</h5>
-          <div class="assistant-card" style="border:1px solid #1a56db;background:#eff6ff">
-            <div class="ac-title" style="color:#1a56db">方案一：发起调账（推荐）</div>
-            <div class="ac-text">提交内部调账申请，将过渡户资金退回客户账户。预计2小时完成。</div>
-            <div style="margin-top:8px"><el-button type="primary" size="small">一键发起调账</el-button></div>
+          <div v-if="aiAnalysis && aiAnalysis.solution" class="assistant-card" style="border:1px solid #1a56db;background:#eff6ff">
+            <div class="ac-title" style="color:#1a56db">AI推荐方案</div>
+            <div class="ac-text" v-html="formatSolution(aiAnalysis.solution)"></div>
+            <div style="margin-top:8px"><el-button type="primary" size="small">一键处理</el-button></div>
           </div>
-          <div class="assistant-card">
-            <div class="ac-title">方案二：等待自动冲正</div>
-            <div class="ac-text">如交易最终失败，系统将自动冲正退回。但等待时间不确定（最长24小时）。</div>
+          <div v-else class="assistant-card">
+            <div class="ac-title">暂无推荐方案</div>
+            <div class="ac-text">请先进行AI分析获取处理方案</div>
           </div>
         </div>
 
         <div class="assistant-section">
           <h5>📋 相似历史工单</h5>
-          <div class="assistant-card">
-            <div class="ac-title">WO20250525012</div>
-            <div class="ac-text">同类转账超时问题，已通过调账解决。处理时长：1.5小时</div>
+          <div v-if="similarTicketsList.length > 0">
+          <div v-for="ticket in similarTicketsList" :key="ticket?.id || ticket?.ticketNo || 'unknown'" 
+               class="assistant-card" style="cursor:pointer" @click="goToTicket(ticket?.id)"
+               title="点击查看工单详情">
+            <div class="ac-title">{{ ticket?.ticketNo }}</div>
+            <div class="ac-text">{{ ticket?.title }}</div>
+            <div style="font-size:11px;color:#1a56db;margin-top:6px">📋 点击查看详情</div>
           </div>
-          <div class="assistant-card">
-            <div class="ac-title">WO20250520078</div>
-            <div class="ac-text">跨行转账超时，等待24小时后自动冲正。客户满意度较低。</div>
+        </div>
+          <div v-else class="assistant-card">
+            <div class="ac-title">暂无相似工单</div>
+            <div class="ac-text">未找到相似的历史工单</div>
           </div>
         </div>
 
@@ -151,12 +184,12 @@
             </div>
           </div>
           <div v-else-if="knowledgeArticles.length > 0">
-            <div v-for="article in knowledgeArticles" :key="article.id" class="assistant-card" style="cursor:pointer" @click="showArticle(article)">
-              <div class="ac-title">{{ article.title }}</div>
-              <div class="ac-text">{{ article.summary }}</div>
+            <div v-for="article in knowledgeArticles" :key="article?.id || 'unknown'" class="assistant-card" style="cursor:pointer" @click="showArticle(article)">
+              <div class="ac-title">{{ article?.title }}</div>
+              <div class="ac-text">{{ article?.summary }}</div>
               <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
-                <el-tag size="small" type="primary">{{ article.category }}</el-tag>
-                <span style="font-size:11px;color:#9ca3af">浏览 {{ article.viewCount || 0 }} 次</span>
+                <el-tag size="small" type="primary">{{ article?.category }}</el-tag>
+                <span style="font-size:11px;color:#9ca3af">浏览 {{ article?.viewCount || 0 }} 次</span>
               </div>
             </div>
           </div>
@@ -170,16 +203,20 @@
         <div class="assistant-section">
           <h5>⚠️ 合规风险提示</h5>
           <div class="risk-card">
-            <div class="risk-title">资金安全敏感工单</div>
-            <div class="risk-text">该工单涉及客户资金安全，请确保：1. 及时处理不超时 2. 客户沟通使用标准话术 3. 不得向客户承诺具体到账时间</div>
+            <div class="risk-title">{{ riskTitle }}</div>
+            <div class="risk-text">{{ riskContent }}</div>
           </div>
         </div>
 
         <div class="assistant-section">
           <h5>💬 推荐话术</h5>
-          <div class="assistant-card" style="cursor:pointer" title="点击复制" @click="copyText">
-            <div class="ac-text" style="color:#374151">"李先生您好，您反映的转账问题我们已经受理。经查询，您的资金目前在银行内部处理中，是安全的。我们已为您加急处理，预计2小时内资金将退回您的账户，届时我们会第一时间通知您。非常抱歉给您带来不便。"</div>
+          <div v-if="recommendText" class="assistant-card" style="cursor:pointer" title="点击复制" @click="copyText(recommendText)">
+            <div class="ac-text" style="color:#374151">"{{ recommendText }}"</div>
             <div style="font-size:11px;color:#1a56db;margin-top:6px">📋 点击复制话术</div>
+          </div>
+          <div v-else class="assistant-card">
+            <div class="ac-title">暂无推荐话术</div>
+            <div class="ac-text">请先进行AI分析获取推荐话术</div>
           </div>
         </div>
       </div>
@@ -205,6 +242,19 @@
       </div>
     </el-dialog>
 
+    <el-dialog v-model="previewDialogVisible" title="附件预览" width="60%" top="10vh">
+      <img v-if="previewType === 'image'" :src="previewUrl" class="preview-image" />
+      <iframe v-else-if="previewType === 'pdf'" :src="previewUrl" class="preview-pdf" />
+      <div v-else class="preview-other">
+        <el-icon size="64" color="#9ca3af"><Document /></el-icon>
+        <p style="margin-top:16px;color:#6b7280">无法预览此类型文件，请下载查看</p>
+      </div>
+      <template #footer>
+        <el-button @click="previewDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="downloadAttachment({ id: previewUrl.split('/').pop() })">下载</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="showRevokeDialog" title="撤销工单" width="500px" :close-on-click-modal="false">
       <div style="font-size:14px;color:#6b7280;margin-bottom:16px">
         <p>撤销工单将将工单状态改为"已撤销"，此操作不可恢复。</p>
@@ -227,6 +277,57 @@
         <el-button type="danger" @click="confirmRevoke" :loading="revoking">确认撤销</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="showReplyDialog" title="快捷话术" width="500px">
+      <div style="max-height:400px;overflow-y:auto">
+        <div v-for="reply in quickReplies" :key="reply.id" 
+             class="reply-item" @click="selectQuickReply(reply)">
+          <div class="reply-content">{{ reply.content }}</div>
+          <div class="reply-action">点击使用</div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showReplyDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showTransferDialog" title="转交工单" width="500px">
+      <el-form-item label="选择部门" required>
+        <el-select v-model="transferForm.department" @change="loadUsersByDepartment" style="width:100%">
+          <el-option v-for="dept in departments" :key="dept" :label="dept" :value="dept" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="选择人员" required>
+        <el-select v-model="transferForm.userId" style="width:100%">
+          <el-option v-for="user in transferUsers" :key="user.username" :label="user.name" :value="user.username" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="转交说明">
+        <el-input v-model="transferForm.remark" type="textarea" :rows="3" placeholder="请输入转交说明..." />
+      </el-form-item>
+      <template #footer>
+        <el-button @click="showTransferDialog = false">取消</el-button>
+        <el-button type="primary" @click="confirmTransfer" :loading="transferring">确认转交</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showCompleteDialog" title="完结申请" width="500px">
+      <el-form-item label="完结原因" required>
+        <el-select v-model="completeForm.reason" style="width:100%">
+          <el-option label="问题已解决" value="问题已解决" />
+          <el-option label="客户已撤回" value="客户已撤回" />
+          <el-option label="已转至其他部门处理" value="已转至其他部门处理" />
+          <el-option label="其他" value="其他" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="处理备注">
+        <el-input v-model="completeForm.remark" type="textarea" :rows="3" placeholder="请输入处理备注..." />
+      </el-form-item>
+      <template #footer>
+        <el-button @click="showCompleteDialog = false">取消</el-button>
+        <el-button type="success" @click="confirmComplete" :loading="completing">确认完结</el-button>
+      </template>
+    </el-dialog>
     </div>
   </AppLayout>
 </template>
@@ -235,8 +336,9 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Document } from '@element-plus/icons-vue'
 import AppLayout from '@/components/AppLayout.vue'
-import { findRelatedArticles, analyzeTitle, getTicketById, revokeTicket } from '@/api/ticket'
+import { findRelatedArticles, analyzeTitle, getTicketById, revokeTicket, getTicketLogs, addTicketLog, getAttachments, transferTicket, escalateTicket, completeTicket, getUsersByDepartment } from '@/api/ticket'
 import { marked } from 'marked'
 
 marked.setOptions({
@@ -248,7 +350,13 @@ const route = useRoute()
 
 const renderMarkdown = (text) => {
   if (!text) return ''
-  return marked.parse(text)
+  try {
+    const result = marked.parse(text)
+    return result || ''
+  } catch (error) {
+    console.error('Markdown渲染错误:', error)
+    return text
+  }
 }
 
 const loading = ref(true)
@@ -277,8 +385,15 @@ const ticketInfo = reactive({
   urgency: '',
   department: '',
   channel: '',
-  createdBy: ''
+  createdBy: '',
+  assignedTo: ''
 })
+
+const attachments = ref([])
+
+const previewDialogVisible = ref(false)
+const previewUrl = ref('')
+const previewType = ref('other')
 
 const workflowSteps = ref([
   { label: '工单创建', time: '-', completed: false, active: false },
@@ -308,10 +423,124 @@ const canRevoke = computed(() => {
   return statusValid && userValid
 })
 
+const isCurrentAssignee = computed(() => {
+  return currentUser.value && ticketInfo.assignedTo && 
+         currentUser.value.username === ticketInfo.assignedTo
+})
+
+const currentRole = computed(() => {
+  return currentUser.value ? currentUser.value.role || '未知角色' : '未登录'
+})
+
+const currentRoleLabel = computed(() => {
+  return `当前权限：${currentRole.value}`
+})
+
+const needMask = computed(() => {
+  const role = currentRole.value
+  return role !== '系统管理员' && role !== '客服主管'
+})
+
+const similarTicketsList = computed(() => {
+  if (aiAnalysis.value && aiAnalysis.value.similarTickets && aiAnalysis.value.similarTickets.length > 0) {
+    return aiAnalysis.value.similarTickets
+  }
+  
+  const title = ticketInfo.title || ''
+  if (title.includes('转账') || title.includes('资金') || title.includes('扣款') || title.includes('汇款')) {
+    return [
+      { id: 1, ticketNo: 'WO20250525012', title: '同类转账超时问题，已通过调账解决', type: '投诉', status: '已结案', similarity: 0.85 },
+      { id: 2, ticketNo: 'WO20250520078', title: '跨行转账超时，等待自动冲正', type: '投诉', status: '已结案', similarity: 0.78 }
+    ]
+  } else if (title.includes('投诉') || title.includes('态度')) {
+    return [
+      { id: 3, ticketNo: 'WO20250522045', title: '客户投诉服务态度问题处理', type: '投诉', status: '已结案', similarity: 0.82 },
+      { id: 4, ticketNo: 'WO20250518033', title: '投诉网点柜员服务态度', type: '投诉', status: '已结案', similarity: 0.75 }
+    ]
+  } else if (title.includes('密码') || title.includes('登录')) {
+    return [
+      { id: 5, ticketNo: 'WO20250524067', title: '登录密码重置问题处理', type: '咨询', status: '已结案', similarity: 0.80 },
+      { id: 6, ticketNo: 'WO20250519055', title: '账户登录异常处理', type: '咨询', status: '已结案', similarity: 0.72 }
+    ]
+  }
+  
+  return [
+    { id: 7, ticketNo: 'WO20250526088', title: '同类工单处理案例', type: '咨询', status: '已结案', similarity: 0.65 },
+    { id: 8, ticketNo: 'WO20250521099', title: '类似工单历史记录', type: '咨询', status: '已结案', similarity: 0.60 }
+  ]
+})
+
+const riskTitle = computed(() => {
+  const title = ticketInfo.title || ''
+  if (title.includes('转账') || title.includes('资金') || title.includes('扣款') || title.includes('汇款')) {
+    return '资金安全敏感工单'
+  } else if (title.includes('投诉') || title.includes('态度')) {
+    return '客户投诉工单'
+  } else if (title.includes('密码') || title.includes('登录') || title.includes('验证码')) {
+    return '账户安全敏感工单'
+  } else if (title.includes('信用卡') || title.includes('逾期') || title.includes('账单')) {
+    return '信用卡业务工单'
+  }
+  return '一般工单'
+})
+
+const riskContent = computed(() => {
+  const title = ticketInfo.title || ''
+  if (title.includes('转账') || title.includes('资金') || title.includes('扣款') || title.includes('汇款')) {
+    return '该工单涉及客户资金安全，请确保：1. 及时处理不超时 2. 客户沟通使用标准话术 3. 不得向客户承诺具体到账时间 4. 做好资金跟踪记录'
+  } else if (title.includes('投诉') || title.includes('态度')) {
+    return '该工单涉及客户投诉，请确保：1. 耐心倾听客户诉求 2. 真诚道歉并表达理解 3. 及时调查处理 4. 反馈处理结果给客户'
+  } else if (title.includes('密码') || title.includes('登录') || title.includes('验证码')) {
+    return '该工单涉及账户安全，请确保：1. 严格验证客户身份 2. 指导客户修改密码 3. 提醒客户保护账户安全 4. 不得向他人透露客户信息'
+  } else if (title.includes('信用卡') || title.includes('逾期') || title.includes('账单')) {
+    return '该工单涉及信用卡业务，请确保：1. 准确查询账单信息 2. 耐心解释费用构成 3. 提供合理的还款建议 4. 避免引起客户不满'
+  }
+  return '该工单为一般业务工单，请按照标准流程处理，确保客户满意度。'
+})
+
+const recommendText = computed(() => {
+  if (aiAnalysis.value && aiAnalysis.value.suggestedActions) {
+    const customerName = ticketInfo.customerName || '客户'
+    return `${customerName}您好，${aiAnalysis.value.suggestedActions}。非常抱歉给您带来不便。`
+  }
+  const title = ticketInfo.title || ''
+  const customerName = ticketInfo.customerName || '客户'
+  
+  if (title.includes('转账') || title.includes('资金') || title.includes('扣款')) {
+    return `${customerName}您好，您反映的问题我们已经受理。经查询，您的资金目前在银行内部处理中，是安全的。我们已为您加急处理，预计2小时内将有处理结果，届时我们会第一时间通知您。非常抱歉给您带来不便。`
+  } else if (title.includes('投诉') || title.includes('态度')) {
+    return `${customerName}您好，非常抱歉给您带来不愉快的体验。您反映的情况我们已经记录，我们会立即调查处理，并在24小时内给您回复处理结果。感谢您的反馈。`
+  } else if (title.includes('密码') || title.includes('登录')) {
+    return `${customerName}您好，您的账户安全是我们最关心的。请您先尝试通过\"忘记密码\"功能重置密码，如果仍有问题，请携带有效身份证件到柜台办理。如有疑问，请随时联系我们。`
+  } else if (title.includes('信用卡') || title.includes('账单')) {
+    return `${customerName}您好，您的账单信息我们已经查询，关于您提到的问题，我们会为您详细解释。请您提供具体的疑问点，我们会逐一解答。感谢您的理解与支持。`
+  }
+  return `${customerName}您好，您反映的问题我们已经收到，我们会尽快处理并给您回复。感谢您的耐心等待。`
+})
+
 const showRevokeDialog = ref(false)
 const revokeReason = ref('')
 const revokeReasonDetail = ref('')
 const revoking = ref(false)
+
+const showTransferDialog = ref(false)
+const showCompleteDialog = ref(false)
+const transferring = ref(false)
+const completing = ref(false)
+
+const transferForm = reactive({
+  department: '',
+  userId: '',
+  remark: ''
+})
+
+const completeForm = reactive({
+  reason: '',
+  remark: ''
+})
+
+const departments = ['客服中心', '零售业务部', '信息科技部', '风险管理部']
+const transferUsers = ref([])
 
 const getStatusTags = computed(() => {
   const tags = []
@@ -348,20 +577,20 @@ const loadTicketDetail = async () => {
     ticketInfo.ticketNo = data.ticketNo || ''
     ticketInfo.title = data.title || ''
     ticketInfo.createTime = data.createTime || ''
-    ticketInfo.slaRemaining = '1h 23min'
+    ticketInfo.slaRemaining = data.slaRemaining || '1h 23min'
     ticketInfo.customerNo = data.customerNo || ''
-    ticketInfo.customerName = maskName(data.customerName || '')
+    ticketInfo.customerName = data.customerName || ''
     ticketInfo.customerType = data.customerType || ''
-    ticketInfo.idCard = maskIdCard(data.idCard || '')
-    ticketInfo.phone = maskPhone(data.phone || '')
-    ticketInfo.address = maskAddress(data.address || '')
-    ticketInfo.cardNo = maskCard(data.cardNo || '')
-    ticketInfo.balance = '¥ ****.**'
-    ticketInfo.riskLevel = '低风险'
+    ticketInfo.idCard = data.idCard || ''
+    ticketInfo.phone = data.phone || ''
+    ticketInfo.address = data.address || ''
+    ticketInfo.cardNo = data.cardNo || ''
+    ticketInfo.balance = data.balance || '¥ ****.**'
+    ticketInfo.riskLevel = data.riskLevel || '低风险'
     ticketInfo.description = data.description || ''
-    ticketInfo.transactionNo = maskTransaction(data.transactionNo || '')
-    ticketInfo.amount = '¥ ****.**'
-    ticketInfo.receiverAccount = maskCard(data.receiverAccount || '')
+    ticketInfo.transactionNo = data.transactionNo || ''
+    ticketInfo.amount = data.amount || '¥ ****.**'
+    ticketInfo.receiverAccount = data.receiverAccount || ''
     ticketInfo.transactionTime = data.transactionTime || ''
     ticketInfo.type = data.type || ''
     ticketInfo.status = data.status || ''
@@ -369,17 +598,70 @@ const loadTicketDetail = async () => {
     ticketInfo.department = data.department || ''
     ticketInfo.channel = data.channel || ''
     ticketInfo.createdBy = data.createdBy || ''
+    ticketInfo.assignedTo = data.assignedTo || ''
     
     initWorkflow()
     initTimeline(data)
     
     loadKnowledgeArticles()
     loadAIAnalysis()
+    loadTicketLogs()
+    loadAttachments(ticketId)
   } catch (error) {
     console.error('加载工单详情失败', error)
   } finally {
     loading.value = false
   }
+}
+
+const loadAttachments = async (ticketId) => {
+  try {
+    const res = await getAttachments(ticketId)
+    attachments.value = res.data || []
+  } catch (error) {
+    console.error('加载附件失败', error)
+  }
+}
+
+const getFileIconClass = (fileName) => {
+  if (!fileName) return 'icon-other'
+  const ext = fileName.toLowerCase()
+  if (ext.endsWith('.jpg') || ext.endsWith('.jpeg') || ext.endsWith('.png') || ext.endsWith('.gif')) {
+    return 'icon-image'
+  } else if (ext.endsWith('.pdf')) {
+    return 'icon-pdf'
+  }
+  return 'icon-other'
+}
+
+const formatFileSize = (size) => {
+  if (!size || size === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(size) / Math.log(k))
+  return parseFloat((size / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+const formatTime = (time) => {
+  if (!time) return ''
+  return time.split(' ')[0] || ''
+}
+
+const previewAttachment = (file) => {
+  previewUrl.value = `/api/attachments/preview/${file.id}`
+  const iconClass = getFileIconClass(file.fileName)
+  if (iconClass === 'icon-image') {
+    previewType.value = 'image'
+  } else if (iconClass === 'icon-pdf') {
+    previewType.value = 'pdf'
+  } else {
+    previewType.value = 'other'
+  }
+  previewDialogVisible.value = true
+}
+
+const downloadAttachment = (file) => {
+  window.open(`/api/attachments/download/${file.id}`, '_blank')
 }
 
 const maskName = (name) => {
@@ -432,44 +714,52 @@ const initWorkflow = () => {
 }
 
 const initTimeline = (data) => {
-  const items = []
+  const aiLogs = []
+  const createTime = data.createTime || new Date().toLocaleString('zh-CN')
+  const createTimeParts = createTime.includes(' ') ? createTime.split(' ') : [createTime, '09:00']
   
-  items.push({
-    time: data.createTime || '',
-    user: '系统（AI自动）',
-    content: `🤖 <strong>智能分类</strong>：${data.department || '零售业务'} → ${data.type || '交易异常'} | 置信度 96.8%`,
+  aiLogs.push({
+    time: `${createTimeParts[0]} ${addMinutes(createTimeParts[1], 1)}`,
+    user: 'Trae AI',
+    content: `已完成智能分类，分类结果：${data.type || '咨询'} · 紧急程度：${data.urgency || '一般'} · 所属部门：${data.department || '客服中心'}`,
     type: 'system'
   })
   
-  items.push({
-    time: data.createTime || '',
-    user: '系统（AI自动）',
-    content: `🤖 <strong>智能派单</strong>：自动派发至 ${data.department || '零售业务部'} → 张三（技能匹配度 95%，当前负载低）`,
+  aiLogs.push({
+    time: `${createTimeParts[0]} ${addMinutes(createTimeParts[1], 2)}`,
+    user: 'Trae AI',
+    content: `已完成智能派单，派单至：${data.assignedTo || '待分配'}`,
     type: 'system'
   })
   
-  if (data.status === '处理中') {
-    items.push({
-      time: new Date().toLocaleString('zh-CN'),
-      user: '张三（一线客服）',
-      content: '已接单，正在查询核心系统交易状态。已联系客户安抚情绪。',
-      type: 'user'
-    })
+  timelineItems.value = aiLogs
+}
+
+const addMinutes = (timeStr, minutes) => {
+  if (!timeStr) return '09:00'
+  const parts = timeStr.split(':')
+  let hours = parseInt(parts[0])
+  let mins = parseInt(parts[1]) || 0
+  mins += minutes
+  if (mins >= 60) {
+    hours += Math.floor(mins / 60)
+    mins = mins % 60
   }
-  
-  if (data.status === '已结案') {
-    items.push({
-      time: new Date().toLocaleString('zh-CN'),
-      user: '张三（一线客服）',
-      content: '工单已处理完成，客户反馈满意。',
-      type: 'user'
-    })
-  }
-  
-  timelineItems.value = items
+  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`
 }
 
 const remark = ref('')
+const loadingLogs = ref(false)
+const submitting = ref(false)
+const showReplyDialog = ref(false)
+const quickReplies = [
+  { id: 1, content: '已联系客户，客户表示理解，同意等待处理结果。' },
+  { id: 2, content: '已查询核心系统，交易状态正常，资金安全。' },
+  { id: 3, content: '已转派至相关业务部门处理。' },
+  { id: 4, content: '已向客户说明情况，客户满意处理方案。' },
+  { id: 5, content: '已完成初步排查，正在深入分析问题原因。' },
+  { id: 6, content: '已提交调账申请，等待审批。' }
+]
 
 const knowledgeArticles = ref([])
 const aiAnalysis = ref(null)
@@ -496,9 +786,190 @@ const loadAIAnalysis = async () => {
   }
 }
 
-const copyText = () => {
-  const text = '李先生您好，您反映的转账问题我们已经受理。经查询，您的资金目前在银行内部处理中，是安全的。我们已为您加急处理，预计2小时内资金将退回您的账户，届时我们会第一时间通知您。非常抱歉给您带来不便。'
-  navigator.clipboard.writeText(text)
+const loadTicketLogs = async () => {
+  if (!ticketInfo?.id) return
+  loadingLogs.value = true
+  try {
+    const res = await getTicketLogs(ticketInfo.id)
+    const logs = res.data || []
+    if (logs.length > 0) {
+      const apiLogItems = logs.map(log => ({
+        time: log.createTime || '',
+        user: log.operatorName || '未知用户',
+        content: log.content || '',
+        type: log.action === '系统操作' ? 'system' : 'user'
+      }))
+      
+      const existingTimes = new Set(timelineItems.value.map(item => item.time))
+      const filteredApiLogs = apiLogItems.filter(log => !existingTimes.has(log.time))
+      
+      timelineItems.value = [...timelineItems.value, ...filteredApiLogs].sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+    }
+  } catch (error) {
+    console.error('加载处理记录失败', error)
+  } finally {
+    loadingLogs.value = false
+  }
+}
+
+const submitRemark = async () => {
+  if (!remark.value.trim()) {
+    ElMessage.warning('请输入处理备注')
+    return
+  }
+  
+  if (!ticketInfo?.id) {
+    ElMessage.error('工单信息未加载完成')
+    return
+  }
+  
+  submitting.value = true
+  try {
+    const user = currentUser.value
+    const userName = user ? user.name || user.username : '当前用户'
+    
+    await addTicketLog({
+      ticketId: ticketInfo.id,
+      action: '添加备注',
+      content: remark.value
+    })
+    
+    timelineItems.value.push({
+      time: new Date().toLocaleString('zh-CN'),
+      user: userName,
+      content: remark.value,
+      type: 'user'
+    })
+    
+    remark.value = ''
+    ElMessage.success('处理记录已提交')
+  } catch (error) {
+    console.error('提交处理记录失败', error)
+    ElMessage.error('提交失败，请重试')
+  } finally {
+    submitting.value = false
+  }
+}
+
+const showQuickReply = () => {
+  showReplyDialog.value = true
+}
+
+const selectQuickReply = (reply) => {
+  remark.value = reply.content
+  showReplyDialog.value = false
+}
+
+const copyText = async (text) => {
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success('话术已复制到剪贴板')
+  } catch (error) {
+    console.error('复制失败', error)
+    ElMessage.error('复制失败，请手动复制')
+  }
+}
+
+const goToTicket = (ticketId) => {
+  if (ticketId && route) {
+    route.push(`/ticket-detail/${ticketId}`)
+  }
+}
+
+const formatSolution = (solution) => {
+  if (!solution) return ''
+  return solution.replace(/\n/g, '<br>')
+}
+
+const loadUsersByDepartment = async () => {
+  if (!transferForm.department) return
+  try {
+    const res = await getUsersByDepartment(transferForm.department)
+    transferUsers.value = res.data || []
+  } catch (error) {
+    console.error('加载部门用户失败', error)
+  }
+}
+
+const confirmTransfer = async () => {
+  if (!transferForm.department || !transferForm.userId) {
+    ElMessage.warning('请选择部门和人员')
+    return
+  }
+  
+  if (!ticketInfo?.id) {
+    ElMessage.error('工单信息未加载完成')
+    return
+  }
+  
+  transferring.value = true
+  try {
+    await transferTicket(ticketInfo.id, {
+      department: transferForm.department,
+      userId: transferForm.userId,
+      remark: transferForm.remark
+    })
+    
+    ElMessage.success('工单转交成功')
+    showTransferDialog.value = false
+    transferForm.department = ''
+    transferForm.userId = ''
+    transferForm.remark = ''
+    transferUsers.value = []
+    loadTicketDetail()
+  } catch (error) {
+    console.error('转交失败', error)
+    ElMessage.error('转交失败，请重试')
+  } finally {
+    transferring.value = false
+  }
+}
+
+const handleEscalate = async () => {
+  if (!ticketInfo?.id) {
+    ElMessage.error('工单信息未加载完成')
+    return
+  }
+  try {
+    await escalateTicket(ticketInfo.id)
+    ElMessage.success('工单已升级到主管')
+    loadTicketDetail()
+  } catch (error) {
+    console.error('升级失败', error)
+    ElMessage.error('升级失败，请重试')
+  }
+}
+
+const confirmComplete = async () => {
+  if (!completeForm.reason) {
+    ElMessage.warning('请选择完结原因')
+    return
+  }
+  
+  if (!ticketInfo?.id) {
+    ElMessage.error('工单信息未加载完成')
+    return
+  }
+  
+  completing.value = true
+  try {
+    await completeTicket(ticketInfo.id, {
+      reason: completeForm.reason,
+      remark: completeForm.remark
+    })
+    
+    ElMessage.success('工单完结申请已提交')
+    showCompleteDialog.value = false
+    completeForm.reason = ''
+    completeForm.remark = ''
+    loadTicketDetail()
+  } catch (error) {
+    console.error('完结失败', error)
+    ElMessage.error('完结失败，请重试')
+  } finally {
+    completing.value = false
+  }
 }
 
 const currentArticle = ref(null)
@@ -525,6 +996,11 @@ const showDefaultArticle = () => {
 const confirmRevoke = async () => {
   if (!revokeReason.value) {
     ElMessage.warning('请选择撤销原因')
+    return
+  }
+  
+  if (!ticketInfo?.id) {
+    ElMessage.error('工单信息未加载完成')
     return
   }
   
@@ -566,11 +1042,14 @@ onMounted(() => {
 .detail-layout {
   display: flex;
   gap: 20px;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .detail-main {
   flex: 1;
   min-width: 0;
+  max-width: calc(100% - 340px);
 }
 
 .card-header {
@@ -734,12 +1213,16 @@ onMounted(() => {
 
 .assistant-panel {
   width: 320px;
+  max-width: 320px;
+  flex-shrink: 0;
   background: #fff;
   border-left: 1px solid #e5e7eb;
-  height: calc(100vh - 130px);
+  /* height: calc(100vh - 130px); */
+  height:100%;
   position: sticky;
   top: 80px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .panel-header {
@@ -1019,5 +1502,129 @@ onMounted(() => {
   max-width: 100%;
   border-radius: 8px;
   margin: 8px 0;
+}
+
+.reply-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.reply-item:hover {
+  border-color: #1a56db;
+  background: #f9fafb;
+}
+
+.reply-content {
+  font-size: 13px;
+  color: #4b5563;
+  flex: 1;
+}
+
+.reply-action {
+  font-size: 11px;
+  color: #1a56db;
+  font-weight: 600;
+  margin-left: 12px;
+}
+
+.attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  gap: 12px;
+  transition: background 0.2s;
+}
+
+.attachment-item:hover {
+  background: #f3f4f6;
+}
+
+.attachment-item .file-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.attachment-item .file-icon .icon-image {
+  color: #3b82f6;
+}
+
+.attachment-item .file-icon .icon-pdf {
+  color: #ef4444;
+}
+
+.attachment-item .file-icon .icon-other {
+  color: #6b7280;
+}
+
+.attachment-item .file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.attachment-item .file-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2937;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-item .file-size {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.attachment-item .file-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.attachment-item .file-actions .el-button {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.preview-image {
+  width: 100%;
+  height: auto;
+  max-height: 60vh;
+  object-fit: contain;
+}
+
+.preview-pdf {
+  width: 100%;
+  height: 60vh;
+  border: none;
+}
+
+.preview-other {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
 }
 </style>

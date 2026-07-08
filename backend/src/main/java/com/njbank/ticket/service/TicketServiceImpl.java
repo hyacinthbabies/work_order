@@ -6,28 +6,73 @@ import com.njbank.ticket.entity.Ticket;
 import com.njbank.ticket.repository.TicketRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
+import javax.persistence.criteria.Predicate;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 @Service
 public class TicketServiceImpl implements TicketService {
     
     private final TicketRepository ticketRepository;
+    private final AssignmentService assignmentService;
     private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
     
-    public TicketServiceImpl(TicketRepository ticketRepository) {
+    public TicketServiceImpl(TicketRepository ticketRepository, AssignmentService assignmentService) {
         this.ticketRepository = ticketRepository;
+        this.assignmentService = assignmentService;
     }
     
     @Override
     public Page<TicketDTO> getTickets(Pageable pageable) {
         return ticketRepository.findAll(pageable).map(this::convertToDTO);
+    }
+    
+    @Override
+    public Page<TicketDTO> searchTickets(String keyword, String status, String type, String channel, String department, Pageable pageable) {
+        Specification<Ticket> spec = buildSpecification(keyword, status, type, channel, department);
+        return ticketRepository.findAll(spec, pageable).map(this::convertToDTO);
+    }
+    
+    private Specification<Ticket> buildSpecification(String keyword, String status, String type, String channel, String department) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            
+            if (StringUtils.hasText(keyword)) {
+                String likeKeyword = "%" + keyword + "%";
+                Predicate ticketNoLike = cb.like(root.get("ticketNo"), likeKeyword);
+                Predicate titleLike = cb.like(root.get("title"), likeKeyword);
+                Predicate customerNameLike = cb.like(root.get("customerName"), likeKeyword);
+                predicates.add(cb.or(ticketNoLike, titleLike, customerNameLike));
+            }
+            
+            if (StringUtils.hasText(status)) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            
+            if (StringUtils.hasText(type)) {
+                predicates.add(cb.equal(root.get("type"), type));
+            }
+            
+            if (StringUtils.hasText(channel)) {
+                predicates.add(cb.equal(root.get("channel"), channel));
+            }
+            
+            if (StringUtils.hasText(department)) {
+                predicates.add(cb.equal(root.get("department"), department));
+            }
+            
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
     
     @Override
@@ -56,7 +101,7 @@ public class TicketServiceImpl implements TicketService {
                 .phone(request.getPhone())
                 .accountNo(request.getAccountNo())
                 .createdBy(currentUser)
-                .status("待处理")
+                .status("待派单")
                 .build();
         
         int slaHours;
@@ -73,7 +118,10 @@ public class TicketServiceImpl implements TicketService {
         ticket.setSlaEndTime(LocalDateTime.now().plusHours(slaHours));
         
         Ticket saved = ticketRepository.save(ticket);
-        return convertToDTO(saved);
+        
+        assignmentService.assignTicket(saved.getId());
+        
+        return convertToDTO(ticketRepository.findById(saved.getId()).orElse(saved));
     }
     
     @Override

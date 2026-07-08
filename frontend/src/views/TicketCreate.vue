@@ -194,10 +194,7 @@
                 drag
                 :action="uploadUrl"
                 :on-preview="handlePreview"
-                :on-remove="handleRemove"
-                :on-success="handleUploadSuccess"
-                :on-error="handleUploadError"
-                :file-list="fileList"
+                v-model:file-list="fileList"
                 :auto-upload="false"
                 :limit="5"
                 accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx"
@@ -242,7 +239,7 @@ import { ElMessage } from 'element-plus'
 import { QuillEditor } from '@vueup/vue-quill'
 import '@vueup/vue-quill/dist/vue-quill.snow.css'
 import AppLayout from '@/components/AppLayout.vue'
-import { analyzeTitle, createTicket } from '@/api/ticket'
+import { analyzeTitle, createTicket, createTicketWithAttachments } from '@/api/ticket'
 
 const router = useRouter()
 
@@ -490,6 +487,10 @@ const handleRemove = (file) => {
   }
 }
 
+const handleFileChange = (file, files) => {
+  fileList.value = files
+}
+
 const handlePreview = (file) => {
   if (file.response && file.response.data && file.response.data.id) {
     previewFileId.value = file.response.data.id
@@ -552,7 +553,7 @@ const submitTicket = async () => {
     ElMessage.warning('请填写问题描述')
     return
   }
-  
+  debugger
   submitLoading.value = true
   
   try {
@@ -574,20 +575,10 @@ const submitTicket = async () => {
         formData.append('files', file.raw)
       })
       
-      const res = await fetch('/api/tickets/with-attachments', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + localStorage.getItem('token')
-        },
-        body: formData
-      })
-      
-      const data = await res.json()
-      if (data.code === 200) {
+      const res = await createTicketWithAttachments(formData)
+      if (res.data) {
         ElMessage.success('工单创建成功')
         router.push('/ticket-list')
-      } else {
-        ElMessage.error(data.message || '创建失败')
       }
     } else {
       const res = await createTicket(form)
